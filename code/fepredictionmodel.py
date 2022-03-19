@@ -32,17 +32,6 @@ class FEPredictionModel:
         self.non_numeric_features = non_numeric_features
         self.numeric_features = None
 
-    # """
-    # Divide dataset randomly into a training and testing set.
-    # """
-    # def split_train_test_random(self,  y_col, test_percent=0.25, seed=7):
-    #     y = self.df[y_col]  # split labels
-    #     x = self.df.drop(columns=[y_col])  # drop labels from original dataset
-    #     self.x_train, self.x_test, self.y_train, self.y_test = train_test_split(x,
-    #                                                                             y,
-    #                                                                             test_size=test_percent,
-    #                                                                             random_state=seed)
-
     """
     Divide dataset into a training and testing set such that each contains the same distribution of entities.
     """
@@ -90,18 +79,17 @@ class FEPredictionModel:
                                 axis=1)
 
         # normalize x_train and x_test
-        ct = ColumnTransformer([('Standardizer', StandardScaler(), self.numeric_features)],
-                               remainder='passthrough')
-        self.x_train = pd.DataFrame(data=ct.fit_transform(self.x_train), columns=self.x_train.columns)
-        self.x_test = pd.DataFrame(data=ct.transform(self.x_test), columns=self.x_test.columns)
+        for feature in self.numeric_features:
+            self.x_train[feature] = (self.x_train[feature] - self.x_train[feature].mean()) / self.x_train[feature].std()
+            self.x_test[feature] = (self.x_test[feature] - self.x_test[feature].mean()) / self.x_test[feature].std()
 
         # add a constant term
-        # self.x_train = sm.add_constant(self.x_train)
-        # self.x_test = sm.add_constant(self.x_test)
-        print(self.numeric_features)
-        print(self.x_train[self.numeric_features].mean(skipna=True))
-        print(self.x_train[self.numeric_features].var(skipna=True))
-        self.x_train[self.numeric_features].to_csv("~/Desktop/test.csv")
+        self.x_train = sm.add_constant(self.x_train)
+        self.x_test = sm.add_constant(self.x_test)
+
+
+
+
         # # run LASSO with multiple alphas and pick the best
         # alphas = np.linspace(0.01, 5, num=51)
         # for alpha in alphas:
