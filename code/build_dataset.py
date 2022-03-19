@@ -25,10 +25,14 @@ merged_df = merged_df.drop(columns='Unnamed: 0')
 
 # created lagged columns and drop non-lagged columns, to reflect information available to policymakers at prediction time
 cols_to_lag = ['cnip', 'unemployment_rate', 'filings']
-for lag in range(1, 8):
+for lag in range(1, 6):
     for col in cols_to_lag:
         lagged_col_name = "L" + str(lag) + "_" + col
         merged_df[lagged_col_name] = merged_df.groupby('fips').shift(lag)[col]
 merged_df = merged_df.drop(columns=['cnip', 'unemployment_rate'])  # drop current month CNIP and unemployment rate
-merged_df = merged_df.copy()
+
+# save FIPS codes as strings so that their column titles are strings when we generate dummy variables later
+merged_df['fips'] = merged_df['fips'].astype(str)
+
+
 merged_df.to_csv("/Users/arjunshanmugam/Documents/School/Brown/Semester6/ECON1680/project1/project1-arjun-shanmugam/cleaned_data/cleaned_dataset.csv")
