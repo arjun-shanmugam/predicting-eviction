@@ -6,8 +6,7 @@ import numpy as np
 import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.linear_model import Ridge
-from urllib.request import urlopen
-import json
+import dataframe_image as dfi
 
 
 
@@ -73,6 +72,7 @@ class FEPredictionModel:
     Run fixed-effects ridge regression and produce summary statistics. 
     """
     def run_ridge(self, fixed_effects_var):
+
         # generate one dummy variable for each entity except for one
         train_dummies = pd.get_dummies(self.x_train[fixed_effects_var],
                                        drop_first=True,
@@ -106,17 +106,31 @@ class FEPredictionModel:
             coefficients.append(ridge.coef_)
 
         # plot MSE for different values of alpha
-        fig1 = plt.figure(1)
+        figure1 = plt.figure()
         plt.xlabel(r'$\alpha$')
         plt.ylabel("Mean squared prediction error")
         plt.title(self.model_name + ": Ridge Prediction Error by Penalty Parameter " + "(" + r'$\alpha$' + ")")
         plt.plot(alphas, errors, '.')
-        fig1.savefig(os.path.join(self.graph_output, self.model_name + '_mse_plot.png'))
+        figure1.savefig(os.path.join(self.graph_output, self.model_name + '_mse_plot.png'))
 
         # store optimal coefficients and prediction error
         self.optimal_mse = np.min(errors)
         self.optimal_coefficients = coefficients[np.argmin(errors)]
-        self.optimal_coefficients = pd.DataFrame(self.optimal_coefficients, columns=self.x_train.columns)
+        # self.optimal_coefficients = pd.DataFrame(self.optimal_coefficients, columns=self.x_train.columns)
 
+    def get_kde_plot(self, column):
+        figure1 = plt.figure(1)
+        # kde plot for training dataset
+        ax1 = pd.concat([self.x_train, self.y_train], axis=1)[column].plot.kde(title="KDE: Distribution of Eviction Filings at Census Tract-Month Level",
+                                                                               label='Training dataset')
+        # kde plot for testing dataset
+        ax1 = pd.concat([self.x_test, self.y_test], axis=1)[column].plot.kde(label='Testing dataset')
+        figure1.legend(loc='center')
+        plt.xlim([-10, 40])
+        plt.figure(1).savefig(os.path.join(self.graph_output, 'test_kde_plot_' + column + ".png"))
 
-
+    def get_summary_statistics(self):
+        training_statistics = pd.concat([self.x_train[self.numeric_features], self.y_train], axis=1).describe()
+        testing_statistics = pd.concat([self.x_test[self.numeric_features], self.y_test], axis=1).describe()
+        dfi.export(training_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'train_summary_stats.png'))
+        dfi.export(testing_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'test_summary_stats.png'))
