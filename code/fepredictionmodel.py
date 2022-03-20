@@ -1,12 +1,14 @@
 """
 This file defines the FEModel class.
 """
+import os
 import numpy as np
 import pandas as pd
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import StandardScaler
-import statsmodels.api as sm
-from statsmodels.iolib.summary2 import summary_col
+from matplotlib import pyplot as plt
+from sklearn.linear_model import Ridge
+from urllib.request import urlopen
+import json
+
 
 
 """
@@ -19,15 +21,18 @@ class FEPredictionModel:
     Initialize a model.
     """
 
-    def __init__(self, datafile, graph_output, table_output, non_numeric_features):
+    def __init__(self, datafile, graph_output, table_output, non_numeric_features, model_name):
         self.df = pd.read_csv(datafile)
         self.graph_output = graph_output
         self.table_output = table_output
+        self.model_name = model_name
 
         self.x_train = None
         self.y_train = None
         self.x_test = None
         self.y_test = None
+        self.optimal_coefficients = None
+        self.optimal_mse = None
 
         self.non_numeric_features = non_numeric_features
         self.numeric_features = None
@@ -64,38 +69,54 @@ class FEPredictionModel:
         self.x_test = self.x_test.drop(columns='Unnamed: 0')
         self.numeric_features = [x for x in list(self.x_train.columns) if x not in self.non_numeric_features]
 
-
     """
-    Run fixed-effects LASSO regression and produce summary statistics. 
+    Run fixed-effects ridge regression and produce summary statistics. 
     """
-
-    def run_LASSO(self, fixed_effects_var):
+    def run_ridge(self, fixed_effects_var):
         # generate one dummy variable for each entity except for one
-        self.x_train = pd.concat([self.x_train, pd.get_dummies(self.x_train[fixed_effects_var],
-                                                               drop_first=True)],
+        train_dummies = pd.get_dummies(self.x_train[fixed_effects_var],
+                                       drop_first=True,
+                                       prefix='county',
+                                       prefix_sep='_')
+        self.x_train = pd.concat([self.x_train, train_dummies],
                                  axis=1)
-        self.x_test = pd.concat([self.x_test, pd.get_dummies(self.x_test[fixed_effects_var],
-                                                             drop_first=True)],
+        test_dummies = pd.get_dummies(self.x_test[fixed_effects_var],
+                                      drop_first=True,
+                                      prefix='county',
+                                      prefix_sep='_'
+                                      )
+        self.x_test = pd.concat([self.x_test, test_dummies],
                                 axis=1)
+        dummy_col_names = train_dummies.columns
 
-        # normalize x_train and x_test
-        for feature in self.numeric_features:
-            self.x_train[feature] = (self.x_train[feature] - self.x_train[feature].mean()) / self.x_train[feature].std()
-            self.x_test[feature] = (self.x_test[feature] - self.x_test[feature].mean()) / self.x_test[feature].std()
+        # drop categorical features
+        self.x_train = self.x_train.drop(columns=self.non_numeric_features)
+        self.x_test = self.x_test.drop(columns=self.non_numeric_features)
 
-        # add a constant term
-        self.x_train = sm.add_constant(self.x_train)
-        self.x_test = sm.add_constant(self.x_test)
+        # run LASSO with multiple alphas and pick the best
+        alphas = np.linspace(0.01, 5, num=51)
+        errors = []
+        coefficients = []
+        for alpha in alphas:
+            ridge = Ridge(alpha=alpha, fit_intercept=True, normalize=True, random_state=7)
+            ridge.fit(self.x_train, self.y_train)
+            predicted_y = ridge.predict(self.x_test)
+            predicted_y = np.where(predicted_y < 0, 0, predicted_y)
+            errors.append(np.mean((predicted_y - self.y_test) ** 2))
+            coefficients.append(ridge.coef_)
 
+        # plot MSE for different values of alpha
+        fig1 = plt.figure(1)
+        plt.xlabel(r'$\alpha$')
+        plt.ylabel("Mean squared prediction error")
+        plt.title(self.model_name + ": Ridge Prediction Error by Penalty Parameter " + "(" + r'$\alpha$' + ")")
+        plt.plot(alphas, errors, '.')
+        fig1.savefig(os.path.join(self.graph_output, self.model_name + '_mse_plot.png'))
 
+        # store optimal coefficients and prediction error
+        self.optimal_mse = np.min(errors)
+        self.optimal_coefficients = coefficients[np.argmin(errors)]
+        self.optimal_coefficients = pd.DataFrame(self.optimal_coefficients, columns=self.x_train.columns)
 
-
-        # # run LASSO with multiple alphas and pick the best
-        # alphas = np.linspace(0.01, 5, num=51)
-        # for alpha in alphas:
-        #     # LASSO regression is a special case of elastic net, where the weight on L1 term is 1
-        #     lasso = sm.regression.linear_model.OLS.fit_regularized(method='elastic_net',
-        #                                                            alpha=alpha,
-        #                                                            L1_wt=1.0)
 
 
