@@ -10,6 +10,7 @@ import dataframe_image as dfi
 
 
 
+
 """
 Runs fixed-effects regression models
 """
@@ -75,16 +76,11 @@ class FEPredictionModel:
 
         # generate one dummy variable for each entity except for one
         train_dummies = pd.get_dummies(self.x_train[fixed_effects_var],
-                                       drop_first=True,
-                                       prefix='county',
-                                       prefix_sep='_')
+                                       drop_first=True)
         self.x_train = pd.concat([self.x_train, train_dummies],
                                  axis=1)
         test_dummies = pd.get_dummies(self.x_test[fixed_effects_var],
-                                      drop_first=True,
-                                      prefix='county',
-                                      prefix_sep='_'
-                                      )
+                                      drop_first=True)
         self.x_test = pd.concat([self.x_test, test_dummies],
                                 axis=1)
         dummy_col_names = train_dummies.columns
@@ -92,7 +88,7 @@ class FEPredictionModel:
         # drop categorical features
         self.x_train = self.x_train.drop(columns=self.non_numeric_features)
         self.x_test = self.x_test.drop(columns=self.non_numeric_features)
-
+        self.x_train.to_csv("~/Desktop/test.csv")
         # run LASSO with multiple alphas and pick the best
         alphas = np.linspace(0.01, 5, num=51)
         errors = []
@@ -118,19 +114,30 @@ class FEPredictionModel:
         self.optimal_coefficients = coefficients[np.argmin(errors)]
         # self.optimal_coefficients = pd.DataFrame(self.optimal_coefficients, columns=self.x_train.columns)
 
-    def get_kde_plot(self, column):
+    """
+    Produces a KDE of the distribution of a certain variable.
+    """
+    def get_kde_plot(self, column, plot_title, xlabel):
         figure1 = plt.figure(1)
         # kde plot for training dataset
-        ax1 = pd.concat([self.x_train, self.y_train], axis=1)[column].plot.kde(title="KDE: Distribution of Eviction Filings at Census Tract-Month Level",
+        ax1 = pd.concat([self.x_train, self.y_train], axis=1)[column].plot.kde(title=plot_title,
                                                                                label='Training dataset')
         # kde plot for testing dataset
         ax1 = pd.concat([self.x_test, self.y_test], axis=1)[column].plot.kde(label='Testing dataset')
         figure1.legend(loc='center')
         plt.xlim([-10, 40])
-        plt.figure(1).savefig(os.path.join(self.graph_output, 'test_kde_plot_' + column + ".png"))
+        plt.xlabel(xlabel)
+        plt.figure(1).savefig(os.path.join(self.graph_output, 'kde_plot_' + column + ".png"))
 
-    def get_summary_statistics(self):
+    def get_summary_statistics(self, variables, labels):
+        rename_dict = {}  # create dictionary to rename the columns
+        for variable, label in zip(variables, labels):
+            rename_dict[variable] = label
         training_statistics = pd.concat([self.x_train[self.numeric_features], self.y_train], axis=1).describe()
         testing_statistics = pd.concat([self.x_test[self.numeric_features], self.y_test], axis=1).describe()
+        training_statistics = training_statistics.rename(columns=rename_dict)
+        testing_statistics = testing_statistics.rename(columns=rename_dict)
+
         dfi.export(training_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'train_summary_stats.png'))
         dfi.export(testing_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'test_summary_stats.png'))
+

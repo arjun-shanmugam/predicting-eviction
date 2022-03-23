@@ -4,7 +4,8 @@ import pandas as pd
 """
 This file cleans Opportunity Insights' dataset of neighborhood characteristics by census tract.
 """
-path_to_oi_data = "/Users/arjunshanmugam/Documents/School/Brown/Semester6/ECON1680/project1/project1-arjun-shanmugam/raw_data/tract_covariates.csv"
+path_to_oi_data = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/raw_data/tract_covariates.csv"
+path_to_clean_data = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/cleaned_data/covariates.csv"
 oi_df = pd.read_csv(path_to_oi_data)
 
 # generate a county_geoid variable which matches the other datasets
@@ -14,7 +15,7 @@ oi_df['tract'] = oi_df['tract'].astype(str).str.zfill(6)
 oi_df['fips'] = oi_df['state'] + oi_df['county'] + oi_df['tract']
 
 # drop unneeded columns
-oi_df = oi_df.drop(columns=['state', 'county', 'tract'])
+oi_df = oi_df.drop(columns=['state', 'county', 'tract', 'mail_return_rate2010'])
 
 # save locally
-oi_df.to_csv("/Users/arjunshanmugam/Documents/School/Brown/Semester6/ECON1680/project1/project1-arjun-shanmugam/cleaned_data/covariates.csv")
+oi_df.to_csv("/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/cleaned_data/covariates.csv")

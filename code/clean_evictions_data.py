@@ -5,7 +5,8 @@ import pandas as pd
 """
 This file loads Eviction Lab's census tract-month level dataset of eviction filings. 
 """
-path_to_evictions_data = "/Users/arjunshanmugam/Documents/School/Brown/Semester6/ECON1680/project1/project1-arjun-shanmugam/raw_data/all_sites_monthly_2020_2021.csv"
+path_to_evictions_data = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/raw_data/all_sites_monthly_2020_2021.csv"
+path_to_clean_data = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/cleaned_data/evictions.csv"
 evictions_df = pd.read_csv(path_to_evictions_data)
 
 # our unemployment data is at the census tract level, so we drop zip code observations
@@ -34,4 +35,4 @@ evictions_df = evictions_df.drop(columns=['city',
 evictions_df = evictions_df.drop(evictions_df.loc[evictions_df['month'] >= datetime(2020, 9, 1)].index)
 
 # save locally
-evictions_df.to_csv("/Users/arjunshanmugam/Documents/School/Brown/Semester6/ECON1680/project1/project1-arjun-shanmugam/cleaned_data/evictions.csv")
+evictions_df.to_csv(path_to_clean_data)
