@@ -46,10 +46,10 @@ fig.write_image(os.path.join(model1_graph_output, 'observed_counties_map.png'), 
 model_1.get_kde_plot('filings', "KDE of Eviction Filings at Census Tract-Month Level", "Number of filings")
 
 # Table 1
-labels = ['Civilian non-institutionalized population (previous month)',
+labels = ['Eviction filings',
+          'Civilian non-institutionalized population (previous month)',
           'Unemployment rate (previous month)',
           'Eviction filings  (previous month)',
-          'Eviction filings',
           '% of workers with <15 min. commute',
           '% single parent households (2010)',
           '% single parent households (1990)',
@@ -82,10 +82,10 @@ labels = ['Civilian non-institutionalized population (previous month)',
           'Population density (2010)',
           'Average annualized job growth (2004-2013)',
           'Number of jobs per square mile']
-variables = ['L1_cnip',
+variables = ['filings',
+             'L1_cnip',
              'L1_unemployment_rate',
              'L1_filings',
-             'filings',
              'traveltime15_2010',
              'singleparent_share2010',
              'singleparent_share1990',
@@ -123,5 +123,5 @@ model_1.get_summary_statistics(variables=variables,
 
 # For the first model, we exclude census tract level covariates
 print(model_1.x_train.columns)
-model_1.run_ridge('fips', exclude_variables=[variables[4:]])
+model_1.run_ridge('fips', exclude_variables=variables[4:])
 print(model_1.optimal_mse)

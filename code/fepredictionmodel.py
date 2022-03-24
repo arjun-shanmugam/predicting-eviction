@@ -70,7 +70,6 @@ class FEPredictionModel:
     """
     Run fixed-effects ridge regression and produce summary statistics. 
     """
-
     def run_ridge(self, fixed_effects_var, exclude_variables=None):
 
         # generate one dummy variable for each entity except for one
@@ -86,8 +85,8 @@ class FEPredictionModel:
 
         # drop researcher-specified features
         if exclude_variables is not None:
-            self.x_train.drop(columns=exclude_variables)
-            self.x_test.drop(columns=exclude_variables)
+            self.x_train = self.x_train.drop(columns=exclude_variables)
+            self.x_test = self.x_test.drop(columns=exclude_variables)
 
         # run ridge with multiple alphas and pick the best
         alphas = np.linspace(0.01, 5, num=51)
@@ -117,14 +116,13 @@ class FEPredictionModel:
     """
     Produces a KDE of the distribution of a certain variable.
     """
-
     def get_kde_plot(self, column, plot_title, xlabel):
         figure1 = plt.figure(1)
         # kde plot for training dataset
-        ax1 = pd.concat([self.x_train, self.y_train], axis=1)[column].plot.kde(title=plot_title,
+        pd.concat([self.x_train, self.y_train], axis=1)[column].plot.kde(title=plot_title,
                                                                                label='Training dataset')
         # kde plot for testing dataset
-        ax1 = pd.concat([self.x_test, self.y_test], axis=1)[column].plot.kde(label='Testing dataset')
+        pd.concat([self.x_test, self.y_test], axis=1)[column].plot.kde(label='Testing dataset')
         figure1.legend(loc='center')
         plt.xlim([-10, 40])
         plt.xlabel(xlabel)
@@ -133,7 +131,6 @@ class FEPredictionModel:
     """
     Produce a table of summary statistics for select variables in PNG format.
     """
-
     def get_summary_statistics(self, variables, labels):
         rename_dict = {}  # create dictionary to rename the columns
         for variable, label in zip(variables, labels):
@@ -142,6 +139,10 @@ class FEPredictionModel:
         testing_statistics = pd.concat([self.x_test[self.numeric_features], self.y_test], axis=1).describe()
         training_statistics = training_statistics.rename(columns=rename_dict)
         testing_statistics = testing_statistics.rename(columns=rename_dict)
+
+        # change order of variables
+        training_statistics = training_statistics[labels]
+        training_statistics = testing_statistics[labels]
 
         dfi.export(training_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'train_summary_stats.png'))
         dfi.export(testing_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'test_summary_stats.png'))
