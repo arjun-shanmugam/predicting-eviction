@@ -8,9 +8,6 @@ from matplotlib import pyplot as plt
 from sklearn.linear_model import Ridge
 import dataframe_image as dfi
 
-
-
-
 """
 Runs fixed-effects regression models
 """
@@ -36,12 +33,13 @@ class FEPredictionModel:
 
         self.non_numeric_features = non_numeric_features
         self.numeric_features = None
+        self.fe_dummies = None
 
     """
     Divide dataset into a training and testing set such that each contains the same distribution of entities.
     """
 
-    def split_train_test(self, y_col, entity_var, time_var, test_percent=0.25, seed=7):
+    def split_train_test(self, y_col, entity_var, time_var, test_percent=0.25):
         observations_per_entity = self.df[entity_var].value_counts().mode()
 
         # this ensures that when we generate dummies, col titles are strings
@@ -72,24 +70,26 @@ class FEPredictionModel:
     """
     Run fixed-effects ridge regression and produce summary statistics. 
     """
-    def run_ridge(self, fixed_effects_var):
+
+    def run_ridge(self, fixed_effects_var, exclude_variables=None):
 
         # generate one dummy variable for each entity except for one
-        train_dummies = pd.get_dummies(self.x_train[fixed_effects_var],
-                                       drop_first=True)
-        self.x_train = pd.concat([self.x_train, train_dummies],
-                                 axis=1)
-        test_dummies = pd.get_dummies(self.x_test[fixed_effects_var],
-                                      drop_first=True)
-        self.x_test = pd.concat([self.x_test, test_dummies],
-                                axis=1)
-        dummy_col_names = train_dummies.columns
+        train_dummies = pd.get_dummies(self.x_train[fixed_effects_var], drop_first=True)
+        self.x_train = pd.concat([self.x_train, train_dummies], axis=1)
+        test_dummies = pd.get_dummies(self.x_test[fixed_effects_var], drop_first=True)
+        self.x_test = pd.concat([self.x_test, test_dummies], axis=1)
+        self.fe_dummies = train_dummies.columns
 
         # drop categorical features
         self.x_train = self.x_train.drop(columns=self.non_numeric_features)
         self.x_test = self.x_test.drop(columns=self.non_numeric_features)
-        self.x_train.to_csv("~/Desktop/test.csv")
-        # run LASSO with multiple alphas and pick the best
+
+        # drop researcher-specified features
+        if exclude_variables is not None:
+            self.x_train.drop(columns=exclude_variables)
+            self.x_test.drop(columns=exclude_variables)
+
+        # run ridge with multiple alphas and pick the best
         alphas = np.linspace(0.01, 5, num=51)
         errors = []
         coefficients = []
@@ -117,6 +117,7 @@ class FEPredictionModel:
     """
     Produces a KDE of the distribution of a certain variable.
     """
+
     def get_kde_plot(self, column, plot_title, xlabel):
         figure1 = plt.figure(1)
         # kde plot for training dataset
@@ -129,6 +130,10 @@ class FEPredictionModel:
         plt.xlabel(xlabel)
         plt.figure(1).savefig(os.path.join(self.graph_output, 'kde_plot_' + column + ".png"))
 
+    """
+    Produce a table of summary statistics for select variables in PNG format.
+    """
+
     def get_summary_statistics(self, variables, labels):
         rename_dict = {}  # create dictionary to rename the columns
         for variable, label in zip(variables, labels):
@@ -140,4 +145,3 @@ class FEPredictionModel:
 
         dfi.export(training_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'train_summary_stats.png'))
         dfi.export(testing_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'test_summary_stats.png'))
-

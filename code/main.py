@@ -15,8 +15,14 @@ model1_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-sha
 model1_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model1/tables"
 
 # Model 1
-model_1 = FEPredictionModel(merged_data, model1_graph_output, model1_tables_output, ['fips', 'month', 'cz', 'czname', 'county'], "Model 1")
-model_1.split_train_test('filings', 'fips', 'month')
+model_1 = FEPredictionModel(datafile=merged_data,
+                            graph_output=model1_graph_output,
+                            table_output=model1_tables_output,
+                            non_numeric_features=['fips', 'month', 'cz', 'czname', 'county'],
+                            model_name="Model 1")
+model_1.split_train_test(y_col='filings',
+                         entity_var='fips',
+                         time_var='month')
 
 # Figure 1: Map of observed counties
 with urlopen('https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json') as response:
@@ -43,7 +49,8 @@ model_1.get_kde_plot('filings', "KDE of Eviction Filings at Census Tract-Month L
 labels = ['Civilian non-institutionalized population (previous month)',
           'Unemployment rate (previous month)',
           'Eviction filings  (previous month)',
-          'Eviction filings''% of workers with < 15 min. commute',
+          'Eviction filings',
+          '% of workers with <15 min. commute',
           '% single parent households (2010)',
           '% single parent households (1990)',
           '% single parent households (2000)',
@@ -74,13 +81,12 @@ labels = ['Civilian non-institutionalized population (previous month)',
           'Number of high paying jobs within 5 miles',
           'Population density (2010)',
           'Average annualized job growth (2004-2013)',
-          'Number of jobs per square mile',
-          ]
-variables = [
-    'L1_cnip',
+          'Number of jobs per square mile']
+variables = ['L1_cnip',
              'L1_unemployment_rate',
              'L1_filings',
-             'Filings''traveltime15_2010',
+             'filings',
+             'traveltime15_2010',
              'singleparent_share2010',
              'singleparent_share1990',
              'singleparent_share2000',
@@ -99,8 +105,8 @@ variables = [
              'share_black2010',
              'share_hisp2010',
              'share_asian2010',
-             'share_black2000',
              'share_white2000',
+             'share_black2000',
              'share_hisp2000',
              'share_asian2000',
              'gsmn_math_g3_2013',
@@ -111,7 +117,11 @@ variables = [
              'jobs_highpay_5mi_2015',
              'popdensity2010',
              'ann_avg_job_growth_2004_2013',
-             'job_density_2013',
-             ]
+             'job_density_2013']
+model_1.get_summary_statistics(variables=variables,
+                               labels=labels)
 
-model_1.get_summary_statistics(variables, labels)
+# For the first model, we exclude census tract level covariates
+print(model_1.x_train.columns)
+model_1.run_ridge('fips', exclude_variables=[variables[4:]])
+print(model_1.optimal_mse)
