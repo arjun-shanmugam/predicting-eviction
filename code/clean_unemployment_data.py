@@ -37,5 +37,9 @@ unemployment_df = unemployment_df.drop(columns=['employed_2020', 'laborforce_202
 # rename CNIP colum
 unemployment_df = unemployment_df.rename(columns={'cnip_2020': 'cnip'})
 
+# rename fips to tract
+unemployment_df = unemployment_df.rename(columns={'fips': 'tract'})
+print(unemployment_df.columns)
+
 # save data
 unemployment_df.to_csv(path_to_clean_data)

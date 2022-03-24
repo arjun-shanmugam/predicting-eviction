@@ -16,7 +16,7 @@ evictions_df = evictions_df.drop(evictions_df.loc[evictions_df['type'] == "Zip C
 evictions_df = evictions_df.drop(evictions_df.loc[evictions_df['GEOID'] == "sealed"].index)
 
 # GEOID is simply FIPS code for rows corresponding to census tracts
-evictions_df = evictions_df.rename(columns={"GEOID": "fips"})
+evictions_df = evictions_df.rename(columns={"GEOID": "tract"})
 
 # separate month into month and year
 evictions_df['month'] = pd.to_datetime(evictions_df['month'])

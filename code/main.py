@@ -13,15 +13,17 @@ import plotly.express as px
 merged_data = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/cleaned_data/cleaned_dataset.csv"
 model1_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model1/graphs"
 model1_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model1/tables"
+model2_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model2/graphs"
+model2_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model2/tables"
 
-# Model 1
+### Model 1
 model_1 = FEPredictionModel(datafile=merged_data,
                             graph_output=model1_graph_output,
                             table_output=model1_tables_output,
-                            non_numeric_features=['fips', 'month', 'cz', 'czname', 'county'],
+                            non_numeric_features=['tract', 'month', 'cz', 'czname', 'county'],
                             model_name="Model 1")
 model_1.split_train_test(y_col='filings',
-                         entity_var='fips',
+                         entity_var='tract',
                          time_var='month')
 
 # Figure 1: Map of observed counties
@@ -120,8 +122,4 @@ variables = ['filings',
              'job_density_2013']
 model_1.get_summary_statistics(variables=variables,
                                labels=labels)
-
-# For the first model, we exclude census tract level covariates
-print(model_1.x_train.columns)
-model_1.run_ridge('fips', exclude_variables=variables[4:])
-print(model_1.optimal_mse)
+model_1.run_ridge('tract')

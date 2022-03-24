@@ -7,6 +7,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from sklearn.linear_model import Ridge
 import dataframe_image as dfi
+from sklearn.metrics import r2_score
 
 """
 Runs fixed-effects regression models
@@ -18,7 +19,8 @@ class FEPredictionModel:
     Initialize a model.
     """
 
-    def __init__(self, datafile, graph_output, table_output, non_numeric_features, model_name):
+    def __init__(self, datafile, graph_output, table_output, non_numeric_features, model_name, float_format='{:.5f}'):
+        pd.options.display.float_format = float_format.format
         self.df = pd.read_csv(datafile)
         self.graph_output = graph_output
         self.table_output = table_output
@@ -30,6 +32,8 @@ class FEPredictionModel:
         self.y_test = None
         self.optimal_coefficients = None
         self.optimal_mse = None
+        self.optimal_r_squared = None
+        self.output_table = None
 
         self.non_numeric_features = non_numeric_features
         self.numeric_features = None
@@ -70,12 +74,13 @@ class FEPredictionModel:
     """
     Run fixed-effects ridge regression and produce summary statistics. 
     """
-    def run_ridge(self, fixed_effects_var, exclude_variables=None):
+
+    def run_ridge(self, fixed_effects_var, exclude_variables=None, include_dummies_in_table=False):
 
         # generate one dummy variable for each entity except for one
-        train_dummies = pd.get_dummies(self.x_train[fixed_effects_var], drop_first=True)
+        train_dummies = pd.get_dummies(self.x_train[fixed_effects_var], drop_first=True, prefix=fixed_effects_var, prefix_sep="_")
         self.x_train = pd.concat([self.x_train, train_dummies], axis=1)
-        test_dummies = pd.get_dummies(self.x_test[fixed_effects_var], drop_first=True)
+        test_dummies = pd.get_dummies(self.x_test[fixed_effects_var], drop_first=True, prefix=fixed_effects_var, prefix_sep="_")
         self.x_test = pd.concat([self.x_test, test_dummies], axis=1)
         self.fe_dummies = train_dummies.columns
 
@@ -92,13 +97,15 @@ class FEPredictionModel:
         alphas = np.linspace(0.01, 5, num=51)
         errors = []
         coefficients = []
+        r_squareds = []
         for alpha in alphas:
-            ridge = Ridge(alpha=alpha, fit_intercept=True, normalize=True, random_state=7)
+            ridge = Ridge(alpha=alpha, normalize=True, random_state=7)
             ridge.fit(self.x_train, self.y_train)
             predicted_y = ridge.predict(self.x_test)
             predicted_y = np.where(predicted_y < 0, 0, predicted_y)
             errors.append(np.mean((predicted_y - self.y_test) ** 2))
             coefficients.append(ridge.coef_)
+            r_squareds.append(r2_score(self.y_test, predicted_y))
 
         # plot MSE for different values of alpha
         figure1 = plt.figure()
@@ -108,19 +115,43 @@ class FEPredictionModel:
         plt.plot(alphas, errors, '.')
         figure1.savefig(os.path.join(self.graph_output, self.model_name + '_mse_plot.png'))
 
-        # store optimal coefficients and prediction error
-        self.optimal_mse = np.min(errors)
+        # store optimal coefficients, prediction error, R2
         self.optimal_coefficients = coefficients[np.argmin(errors)]
-        # self.optimal_coefficients = pd.DataFrame(self.optimal_coefficients, columns=self.x_train.columns)
+        self.optimal_mse = np.min(errors)
+        self.optimal_r_squared = r_squareds[np.argmin(errors)]
+        self.output_table = pd.DataFrame({"Variable/Metric": self.x_train.columns,
+                                          "Coefficient/Value": self.optimal_coefficients})
+
+        # produce pdf of coefficient values
+        figure = plt.figure()
+        self.output_table.loc[self.output_table["Variable/Metric"].isin(self.fe_dummies)]['Coefficient/Value'].plot.kde(
+            title="Distribution of coefficients on " + fixed_effects_var + " dummies")
+        plt.xlabel("Coefficient value")
+        plt.xlim(-3, 3)
+        figure.savefig(os.path.join(self.graph_output, self.model_name + "_coefficients_distribution.png"))
+
+        # drop rows corresponding to dummy variable coefficients
+        self.output_table = self.output_table.drop(self.output_table.loc[self.output_table['Variable/Metric'].isin(self.fe_dummies)].index)
+
+        # append MSE and R^2 to the output table
+        self.output_table = self.output_table.append({'Variable/Metric': "MSE",
+                                                      'Coefficient/Value': self.optimal_mse}, ignore_index=True)
+        self.output_table = self.output_table.append({'Variable/Metric': "R^2",
+                                                      'Coefficient/Value': self.optimal_r_squared}, ignore_index=True)
+
+        # save output table as PNG
+        self.output_table.set_index('Variable/Metric')
+        dfi.export(self.output_table, os.path.join(self.table_output, self.model_name + "_regression_output.png"))
 
     """
     Produces a KDE of the distribution of a certain variable.
     """
+
     def get_kde_plot(self, column, plot_title, xlabel):
         figure1 = plt.figure(1)
         # kde plot for training dataset
         pd.concat([self.x_train, self.y_train], axis=1)[column].plot.kde(title=plot_title,
-                                                                               label='Training dataset')
+                                                                         label='Training dataset')
         # kde plot for testing dataset
         pd.concat([self.x_test, self.y_test], axis=1)[column].plot.kde(label='Testing dataset')
         figure1.legend(loc='center')
@@ -131,18 +162,26 @@ class FEPredictionModel:
     """
     Produce a table of summary statistics for select variables in PNG format.
     """
+
     def get_summary_statistics(self, variables, labels):
-        rename_dict = {}  # create dictionary to rename the columns
-        for variable, label in zip(variables, labels):
-            rename_dict[variable] = label
-        training_statistics = pd.concat([self.x_train[self.numeric_features], self.y_train], axis=1).describe()
-        testing_statistics = pd.concat([self.x_test[self.numeric_features], self.y_test], axis=1).describe()
-        training_statistics = training_statistics.rename(columns=rename_dict)
-        testing_statistics = testing_statistics.rename(columns=rename_dict)
 
-        # change order of variables
-        training_statistics = training_statistics[labels]
-        training_statistics = testing_statistics[labels]
+        training_statistics = pd.concat([self.x_train[self.numeric_features], self.y_train], axis=1)[variables].describe()
+        testing_statistics = pd.concat([self.x_test[self.numeric_features], self.y_test], axis=1)[variables].describe()
 
-        dfi.export(training_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'train_summary_stats.png'))
-        dfi.export(testing_statistics.transpose()[['count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'test_summary_stats.png'))
+        # transpose summary tables and add variable labels
+        training_summary = training_statistics.transpose()
+        testing_summary = testing_statistics.transpose()
+
+        print(training_summary.index)
+        print(labels)
+
+        training_summary['Label'] = pd.Series(labels, index=training_summary.index)
+        testing_summary['Label'] = pd.Series(labels, index=training_summary.index)
+
+
+        print(pd.Series(labels))
+        print(training_summary['Label'])
+        print(testing_summary['Label'])
+
+        dfi.export(training_summary[['Label', 'count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'train_summary_stats.png'))
+        dfi.export(testing_summary[['Label', 'count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'test_summary_stats.png'))

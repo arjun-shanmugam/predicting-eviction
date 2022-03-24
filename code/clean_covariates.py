@@ -12,10 +12,10 @@ oi_df = pd.read_csv(path_to_oi_data)
 oi_df['state'] = oi_df['state'].astype(int).astype(str).str.zfill(2)
 oi_df['county'] = oi_df['county'].astype(int).astype(str).str.zfill(3)
 oi_df['tract'] = oi_df['tract'].astype(str).str.zfill(6)
-oi_df['fips'] = oi_df['state'] + oi_df['county'] + oi_df['tract']
+oi_df['tract'] = oi_df['state'] + oi_df['county'] + oi_df['tract']
 
 # drop unneeded columns
-oi_df = oi_df.drop(columns=['state', 'county', 'tract', 'mail_return_rate2010'])
+oi_df = oi_df.drop(columns=['state', 'county'])
 
 # save locally
 oi_df.to_csv("/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/cleaned_data/covariates.csv")
