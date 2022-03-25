@@ -18,6 +18,8 @@ model2_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-sha
 model2_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model2/tables"
 model3_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model3/graphs"
 model3_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model3/tables"
+model4_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model4/graphs"
+model4_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model4/tables"
 output_general = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output"
 
 ### Model 1
@@ -67,6 +69,7 @@ labels = ['Eviction filings',
           'Portion of residents foreign born',
           'Median household income (1990)',
           'Median household income (2016)',
+          'Census mail return rate (2010)',
           'Population density (2000)',
           'Portion below federal poverty line (2010)',
           'Portion below federal poverty line (2000)',
@@ -103,6 +106,7 @@ variables = ['filings',
              'foreign_share2010',
              'med_hhinc1990',
              'med_hhinc2016',
+             'mail_return_rate2010',
              'popdensity2000',
              'poor_share2010',
              'poor_share2000',
@@ -128,6 +132,7 @@ model_1.get_summary_statistics(variables=variables,
                                labels=labels)
 model_1.run_ridge('tract')
 
+
 ### Model 2
 model_2 = FEPredictionModel(datafile=merged_data,
                             graph_output=model2_graph_output,
@@ -137,6 +142,8 @@ model_2 = FEPredictionModel(datafile=merged_data,
 model_2.split_train_test(y_col='filings',
                          entity_var='tract',
                          time_var='month')
+model_2.get_summary_statistics(variables=variables,
+                               labels=labels)
 model_2.run_ridge('county')
 
 ### Model 3
@@ -149,12 +156,65 @@ model_3.kmeans()
 model_3.split_train_test(y_col='filings',
                          entity_var='tract',
                          time_var='month')
+model_3.get_summary_statistics(variables=variables,
+                               labels=labels)
 model_3.run_ridge('cluster')
 
 # generate concatenated regression output table
-row_names = model_1.output_table['Variable/Metric']
-model_1_output = model_1.output_table['Coefficient/Value']
-model_2_output = model_2.output_table['Coefficient/Value']
-model_3_output = model_3.output_table['Coefficient/Value']
-all_models_output = pd.concat([row_names, model_1_output, model_2_output, model_3_output], axis=1)
+labels = model_1.output_table['Label']
+model_1_output = pd.Series(model_1.output_table['Coefficient/Value'], name="Model 1")
+model_2_output = pd.Series(model_2.output_table['Coefficient/Value'], name="Model 2")
+model_3_output = pd.Series(model_3.output_table['Coefficient/Value'], name="Model 3")
+all_models_output = pd.concat([labels, model_1_output, model_2_output, model_3_output], axis=1)
 dfi.export(all_models_output, os.path.join(output_general, 'all_models_reg_output.png'))
+
+### compare model 1 estimates with and without covariates
+# model 4 runs tract fixed effects regressio
+model_4 = FEPredictionModel(datafile=merged_data,
+                            graph_output=model4_graph_output,
+                            table_output=model4_tables_output,
+                            non_numeric_features=['tract', 'month', 'cz', 'czname', 'county'],
+                            model_name="Model 4")
+model_4.split_train_test(y_col='filings',
+                         entity_var='tract',
+                         time_var='month')
+model_4.get_summary_statistics(variables=variables,
+                               labels=labels)
+model_4.run_ridge('tract', exclude_variables=['traveltime15_2010',
+                                              'mail_return_rate2010',
+                                              'singleparent_share2010',
+                                              'singleparent_share1990',
+                                              'singleparent_share2000',
+                                              'hhinc_mean2000',
+                                              'mean_commutetime2000',
+                                              'frac_coll_plus2000',
+                                              'frac_coll_plus2010',
+                                              'foreign_share2010',
+                                              'med_hhinc1990',
+                                              'med_hhinc2016',
+                                              'popdensity2000',
+                                              'poor_share2010',
+                                              'poor_share2000',
+                                              'poor_share1990',
+                                              'share_white2010',
+                                              'share_black2010',
+                                              'share_hisp2010',
+                                              'share_asian2010',
+                                              'share_white2000',
+                                              'share_black2000',
+                                              'share_hisp2000',
+                                              'share_asian2000',
+                                              'gsmn_math_g3_2013',
+                                              'rent_twobed2015',
+                                              'emp2000',
+                                              'ln_wage_growth_hs_grad',
+                                              'jobs_total_5mi_2015',
+                                              'jobs_highpay_5mi_2015',
+                                              'popdensity2010',
+                                              'ann_avg_job_growth_2004_2013',
+                                              'job_density_2013'])
+model_4_output = pd.Series(model_4.output_table['Coefficient/Value'], name="Model 1 w/o covariates")
+model_1_and_4_output = pd.concat([labels, model_1_output, model_4_output], axis=1)
+model_1_and_4_output.fillna('')
+dfi.export(model_1_and_4_output, os.path.join(output_general, 'model1_without_oi_compare.png'))
+print(model_1.optimal_abs_error)

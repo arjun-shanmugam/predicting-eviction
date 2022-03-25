@@ -10,11 +10,13 @@ from sklearn.linear_model import Ridge
 import dataframe_image as dfi
 from sklearn.metrics import r2_score, silhouette_score
 from sklearn.preprocessing import normalize
+from binscatter import binscatter
+from yellowbrick.cluster import KElbowVisualizer
 
 
 class FEPredictionModel:
 
-    def __init__(self, datafile, graph_output, table_output, non_numeric_features, model_name, float_format='{:.5f}'):
+    def __init__(self, datafile, graph_output, table_output, non_numeric_features, model_name, float_format='{:.5f}', desired_var_order=None):
         """
         Initializes an FEPredictionModel
         :param datafile: path to balanced panel dataset
@@ -24,6 +26,8 @@ class FEPredictionModel:
         :param model_name: name for model
         :param float_format: specify how many decimals to include in output tables
         """
+
+
         pd.options.display.float_format = float_format.format  # specify format of numbers in output tables
 
         self.df = pd.read_csv(datafile)
@@ -31,6 +35,9 @@ class FEPredictionModel:
         self.graph_output = graph_output
         self.table_output = table_output
         self.model_name = model_name
+        self.variable_order = desired_var_order
+        self.variable_labels = None
+        self.variable_label_dict = None
 
         self.x_train = None
         self.y_train = None
@@ -42,6 +49,7 @@ class FEPredictionModel:
         self.optimal_k = None
         self.optimal_alpha = None
         self.output_table = None
+        self.optimal_abs_error = None
 
         self.non_numeric_features = non_numeric_features
         self.numeric_features = None
@@ -57,6 +65,8 @@ class FEPredictionModel:
         :return: None
         """
 
+        if self.variable_order is not None:
+            self.df = self.df[self.variable_order + self.non_numeric_features]
         # count number of times each entity is observed
         observations_per_entity = self.df[entity_var].value_counts().mode()
 
@@ -102,6 +112,11 @@ class FEPredictionModel:
         self.x_train = self.x_train.drop(columns=self.non_numeric_features)
         self.x_test = self.x_test.drop(columns=self.non_numeric_features)
 
+        # if k-means labels are a feature of the dataset, drop them so we do not regress on these values
+        if 'cluster' in self.x_train.columns or 'cluster' in self.x_test.columns:
+            self.x_train = self.x_train.drop(columns='cluster')
+            self.x_test = self.x_test.drop(columns='cluster')
+
         # drop researcher-specified features
         if exclude_variables is not None:
             self.x_train = self.x_train.drop(columns=exclude_variables)
@@ -110,6 +125,9 @@ class FEPredictionModel:
         # run ridge with multiple alphas and pick the best
         alphas = np.linspace(0.01, 5, num=51)
         errors = []
+        all_squared_errors = []
+        all_abs_errors = []
+        mean_abs_errors = []
         coefficients = []
         r_squareds = []
         for alpha in alphas:
@@ -118,22 +136,34 @@ class FEPredictionModel:
             predicted_y = ridge.predict(self.x_test)
             predicted_y = np.where(predicted_y < 0, 0, predicted_y)
             errors.append(np.mean((predicted_y - self.y_test) ** 2))
+            all_squared_errors.append((predicted_y - self.y_test) ** 2)
+            all_abs_errors.append(abs((predicted_y - self.y_test)))
+            mean_abs_errors.append(np.mean(abs((predicted_y - self.y_test))))
             coefficients.append(ridge.coef_)
             r_squareds.append(r2_score(self.y_test, predicted_y))
 
         # plot MSE for different values of alpha
-        figure1 = plt.figure()
+        figure = plt.figure()
         plt.xlabel(r'$\alpha$')
-        plt.ylabel("Mean squared prediction error")
+        plt.ylabel("MAPE prediction error")
         plt.title(self.model_name + ": Ridge Prediction Error by Penalty Parameter " + "(" + r'$\alpha$' + ")")
-        plt.plot(alphas, errors, '.')
-        figure1.savefig(os.path.join(self.graph_output, self.model_name + '_mse_plot.png'))
+        plt.plot(alphas, mean_abs_errors, '.')
+        figure.savefig(os.path.join(self.graph_output, self.model_name + '_mse_plot.png'))
+
+        # plot prediction error by l1_cnip
+        figure, ax = plt.subplots()
+        ax.binscatter(self.x_test['L1_cnip'], all_abs_errors[np.argmin(mean_abs_errors)])
+        ax.set_xlabel('CNIP in July 2020')
+        ax.set_ylabel('MAPE')
+        ax.set_title('MAPE by CNIP of census tract (binscatter)')
+        figure.savefig(os.path.join(self.graph_output, self.model_name + 'error_by_cnip_plot.png'))
 
         # store optimal coefficients, prediction error, R^2, alpha
-        self.optimal_coefficients = coefficients[np.argmin(errors)]
+        self.optimal_coefficients = coefficients[np.argmin(mean_abs_errors)]
         self.optimal_mse = np.min(errors)
-        self.optimal_r_squared = r_squareds[np.argmin(errors)]
-        self.optimal_alpha = alphas[np.argmin(errors)]
+        self.optimal_abs_error = np.mean(all_abs_errors[np.argmin(mean_abs_errors)])
+        self.optimal_r_squared = r_squareds[np.argmin(mean_abs_errors)]
+        self.optimal_alpha = alphas[np.argmin(mean_abs_errors)]
         self.output_table = pd.DataFrame({"Variable/Metric": self.x_train.columns,
                                           "Coefficient/Value": self.optimal_coefficients})
 
@@ -155,9 +185,20 @@ class FEPredictionModel:
                                                       'Coefficient/Value': self.optimal_r_squared}, ignore_index=True)
         self.output_table = self.output_table.append({'Variable/Metric': "alpha",
                                                       'Coefficient/Value': self.optimal_alpha}, ignore_index=True)
+        self.output_table = self.output_table.append({'Variable/Metric': "MAPE",
+                                                      'Coefficient/Value': self.optimal_abs_error}, ignore_index=True)
+
+
+        # add variable labels to output table
+        self.output_table['Label'] = self.output_table['Variable/Metric'].map(self.variable_label_dict)
+
+        # save output table  as PNG
+        self.output_table = self.output_table.set_index('Variable/Metric')
+
+        # change order of columns to match summary statistics
+        self.output_table = self.output_table[['Label', 'Coefficient/Value']]
 
         # save output table as PNG
-        self.output_table.set_index('Variable/Metric')
         dfi.export(self.output_table, os.path.join(self.table_output, self.model_name + "_regression_output.png"))
 
     def get_kde_plot(self, column, plot_title, x_label):
@@ -182,9 +223,11 @@ class FEPredictionModel:
         """
         Generate table of summary statistics for specified variables
         :param variables: variables whose summary statistics we want to generate
-        :param labels: English names of specified labels, in order correspoding to the order of :param variables
+        :param labels: English names of specified labels, in order corresponding to the order of :param variables
         """
-
+        self.variable_order = variables
+        self.variable_labels = labels
+        self.generate_variable_label_dict()
         # re-concatenate features and labels; describe the data
         training_statistics = pd.concat([self.x_train[self.numeric_features], self.y_train], axis=1)[variables].describe()
         testing_statistics = pd.concat([self.x_test[self.numeric_features], self.y_test], axis=1)[variables].describe()
@@ -192,36 +235,33 @@ class FEPredictionModel:
         # transpose summary tables and add variable labels
         training_summary = training_statistics.transpose()
         testing_summary = testing_statistics.transpose()
-
-        # 
         training_summary['Label'] = pd.Series(labels, index=training_summary.index)
         testing_summary['Label'] = pd.Series(labels, index=training_summary.index)
 
-        print(pd.Series(labels))
-        print(training_summary['Label'])
-        print(testing_summary['Label'])
-
+        # export to png
         dfi.export(training_summary[['Label', 'count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'train_summary_stats.png'))
         dfi.export(testing_summary[['Label', 'count', 'mean', 'std', '50%']], os.path.join(self.table_output, 'test_summary_stats.png'))
 
-    """
-    Use k-means to assign each observation to a cluster.
-    """
-
-    def kmeans(self):
+    def kmeans(self, k=10):
+        """
+        Optimally assigns observations in dataset to clusters.
+        """
+        # normalize data
         self.df_scaled = normalize(self.df.drop(columns=self.non_numeric_features))
-        K = range(2, 30)
-        silhouette_coefficients = []  # keep track of sum sq. distances
-        labels = []  # store the labels generated
-        for k in K:
-            km = KMeans(n_clusters=k, random_state=7).fit(self.df_scaled)
-            labels.append(km.labels_)  # store labels from k-means ran for each value of k
-            silhouette_coefficients.append(silhouette_score(self.df_scaled, pd.Series(km.labels_), metric='euclidean'))
 
-        self.optimal_k = K[np.argmax(silhouette_coefficients)]
-        self.df['cluster'] = pd.Series(labels[self.optimal_k])
-        plt.plot(K, silhouette_coefficients, '.')
-        plt.xlabel("Value of k")
-        plt.ylabel("Silhouette score")
-        plt.title("Silhouette scores by value of k")
-        plt.annotate("Maximum silhouette score = " + str(np.max(silhouette_coefficients)), (self.optimal_k, np.max(silhouette_coefficients)))
+        # run kmeans
+        km = KMeans(n_clusters=k, random_state=7).fit(self.df_scaled)
+        self.df['cluster'] = pd.Series(km.labels_)  # add labels to DataFrame
+
+    def generate_variable_label_dict(self):
+        """
+        Builds mapping from each variable to its label.
+        """
+        variable_label_dict = {}
+        for variable, label in zip(self.variable_order, self.variable_labels):
+            variable_label_dict[variable] = label
+        variable_label_dict['MSE'] = "Mean Squared Error"
+        variable_label_dict['R^2'] = "R-squared"
+        variable_label_dict['alpha'] = "alpha"
+        variable_label_dict['MAPE'] = "Mean Absolute Prediction Error"
+        self.variable_label_dict = variable_label_dict
