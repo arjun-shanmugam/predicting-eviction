@@ -8,6 +8,7 @@ from fepredictionmodel import FEPredictionModel
 from urllib.request import urlopen
 import json
 import plotly.express as px
+import dataframe_image as dfi
 
 # Set paths here
 merged_data = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/cleaned_data/cleaned_dataset.csv"
@@ -15,6 +16,9 @@ model1_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-sha
 model1_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model1/tables"
 model2_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model2/graphs"
 model2_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model2/tables"
+model3_graph_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model3/graphs"
+model3_tables_output = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output/model3/tables"
+output_general = "/Users/arjunshanmugam/Documents/GitHub/project1-arjun-shanmugam/output"
 
 ### Model 1
 model_1 = FEPredictionModel(datafile=merged_data,
@@ -123,3 +127,34 @@ variables = ['filings',
 model_1.get_summary_statistics(variables=variables,
                                labels=labels)
 model_1.run_ridge('tract')
+
+### Model 2
+model_2 = FEPredictionModel(datafile=merged_data,
+                            graph_output=model2_graph_output,
+                            table_output=model2_tables_output,
+                            non_numeric_features=['tract', 'month', 'cz', 'czname', 'county'],
+                            model_name="Model 2")
+model_2.split_train_test(y_col='filings',
+                         entity_var='tract',
+                         time_var='month')
+model_2.run_ridge('county')
+
+### Model 3
+model_3 = FEPredictionModel(datafile=merged_data,
+                            graph_output=model3_graph_output,
+                            table_output=model3_tables_output,
+                            non_numeric_features=['tract', 'month', 'cz', 'czname', 'county'],
+                            model_name="Model 3")
+model_3.kmeans()
+model_3.split_train_test(y_col='filings',
+                         entity_var='tract',
+                         time_var='month')
+model_3.run_ridge('cluster')
+
+# generate concatenated regression output table
+row_names = model_1.output_table['Variable/Metric']
+model_1_output = model_1.output_table['Coefficient/Value']
+model_2_output = model_2.output_table['Coefficient/Value']
+model_3_output = model_3.output_table['Coefficient/Value']
+all_models_output = pd.concat([row_names, model_1_output, model_2_output, model_3_output], axis=1)
+dfi.export(all_models_output, os.path.join(output_general, 'all_models_reg_output.png'))
